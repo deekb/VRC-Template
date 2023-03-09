@@ -9,9 +9,10 @@ Contact Derek.m.baier@gmail.com for more information
 """
 # <editor-fold desc="Imports and license">
 from vex import *
-from Constants import Color, AutonomousTask
-from HelperFunctions import Drivetrain, cubic_normalize, \
-    get_optical_color, CustomPID, Logging
+
+from Constants import *
+from HelperFunctions import Logging
+from BetterDrivetrain import Drivetrain
 
 __title__ = "Vex V5 2023 Competition code"
 __description__ = "Competition Code for VRC: Spin-Up <StartYear>-<EndYear>"
@@ -38,9 +39,8 @@ class Motors:
     leftFrontMotor = Motor(Ports.PORT11, GearSetting.RATIO_18_1, False)
     leftRearMotor = Motor(Ports.PORT2, GearSetting.RATIO_18_1, False)
     # Motor groups:
-    leftDrivetrain = MotorGroup(leftFrontMotor, leftRearMotor)
-    rightDrivetrain = MotorGroup(rightFrontMotor, rightRearMotor)
-    allWheels = MotorGroup(leftFrontMotor, leftRearMotor, rightFrontMotor, rightRearMotor)
+    allWheels = MotorGroup(leftFrontMotor, leftRearMotor, rightFrontMotor, rightRearMotor)  # A reference to all wheels so that we can stop the drivetrain the robot in one command
+    allMotors = MotorGroup(leftFrontMotor, leftRearMotor, rightFrontMotor, rightRearMotor)  # A reference to all motors so that we can stop everything on the robot in one command
 
 
 class Sensors:
@@ -60,15 +60,15 @@ class Controllers:
 
 class Globals:
     """
-    Stores variables that may need to be (or ought to be able to be) accessed by any function in the program, here you can also set default/initial values for said variables
+    Stores variables that may need to be (or ought to be able to be) modified by any function in the program, here you can also set default/initial values for said variables
     """
-    # SPEED_CURVE_LINEARITY is demonstrated on this graph https://www.desmos.com/calculator/zoc7drp2pc
-    # it should be set between 0.00 and 3.00 for optimal performance
-    SPEED_CURVE_LINEARITY = 0.35
+    AUTONOMOUS_THREADS = []
+    DRIVER_CONTROL_THREADS = []
     SETUP_COMPLETE = False
-    PAUSE_DRIVER_CONTROL = False
+    PAUSE_DRIVER_CONTROL = False  # This can be used for autonomous functions during driver control, for example if we want to turn towards the goal
     AUTONOMOUS_TASK = None
     STOPPING_MODE = None
+    DRIVE_CONTROLLER = Controllers.primary
     SETTINGS = (
         ("Stopping", [("Coast", COAST),
                       ("Brake", BRAKE),
@@ -118,12 +118,110 @@ def cclear(controller: Controller = Controllers.primary) -> None:
     """
     controller.screen.clear_screen()
     controller.screen.set_cursor(1, 1)
+
+
+# </editor-fold>
+
+
+def on_autonomous() -> None:
+    """
+    This is the function designated to run when the autonomous portion of the program is triggered
+    """
+    # Wait for setup to be complete
+    brain.screen.set_font(FontType.MONO12)
+    if not Globals.SETUP_COMPLETE:
+        bprint("[on_autonomous]: setup not complete, ignoring request")
+        return
+    autonomous_log = Logging(log_format="[%n]:%m:%s\n", mode="wt", log_name="Autonomous")  # Start a new log for this autonomous
+
+    def auton_log(string):
+        """
+        Send a string to the log and the brain screen
+        :param string: The string to send
+        """
+        if AUTONOMOUS_VERBOSITY >= 1:
+            autonomous_log.log(string, "on_autonomous")
+            if AUTONOMOUS_VERBOSITY >= 2:
+                bprint(string)
+
+    brain.screen.set_font(FontType.MONO12)
+    Motors.allWheels.set_stopping(BRAKE)
+    drivetrain.reset()
+    auton_log("Autonomous:STATUS: Start")
+    auton_log("Autonomous:STATUS: Running predefined autonomous routine \"" + Globals.AUTONOMOUS_TASK + "\"")
+    if Globals.AUTONOMOUS_TASK == AutonomousTask.DO_NOTHING:
+        pass
+    elif Globals.AUTONOMOUS_TASK == AutonomousTask.SKILLS:
+        pass
+    if Globals.AUTONOMOUS_TASK == AutonomousTask.DRIVETRAIN_TEST:
+        drivetrain.turn_to_heading(0)
+        drivetrain.move_towards_heading(0, target_speed=50, distance_mm=1000)
+        drivetrain.turn_to_heading(180)
+        drivetrain.move_towards_heading(180, target_speed=50, distance_mm=1000)
+        drivetrain.turn_to_heading(180)
+        drivetrain.move_towards_heading(180, target_speed=-50, distance_mm=1000)
+    auton_log("Autonomous:STATUS: Cleaning up")
+    Motors.allMotors.stop()
+    Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
+    auton_log("Autonomous:STATUS: Exit")
+    autonomous_log.exit()
+
+
+def on_driver() -> None:
+    """
+    This is the function designated to run when the driver control portion of the program is triggered
+    """
+    # Wait for setup to be complete
+    brain.screen.set_font(FontType.MONO12)
+    bprint("[on_driver]: Waiting for setup")
+    while not Globals.SETUP_COMPLETE:
+        sleep(5)
+    bprint("[on_driver]: Done")
+    Motors.allWheels.spin(FORWARD)
+    while True:
+        if not Globals.PAUSE_DRIVER_CONTROL:
+            drivetrain.move_with_controller(Globals.DRIVE_CONTROLLER)
+        else:
+            wait(10)
+
+
+# <editor-fold desc="Competition State Handlers">
+def autonomous_handler() -> None:
+    """
+    Coordinate when to run the autonomous function(s) using the vex competition library to read the game state.
+    """
+    for _function in (on_autonomous,):
+        Globals.AUTONOMOUS_THREADS.append(Thread(target=_function))
+    bprint("Started autonomous")
+    while competition.is_autonomous() and competition.is_enabled():
+        wait(10)
+    for thread in Globals.AUTONOMOUS_THREADS:
+        thread.stop()
+
+
+def driver_handler() -> None:
+    """
+    Coordinate when to run the driver function(s) using the vex competition library to read the game state.
+    """
+    for _function in (on_driver,):
+        Globals.DRIVER_CONTROL_THREADS.append(Thread(target=_function))
+    bprint("Started driver control")
+    while competition.is_driver_control() and competition.is_enabled():
+        wait(10)
+    for thread in Globals.DRIVER_CONTROL_THREADS:
+        thread.stop()
+
+
+# Register the competition handlers
+competition = Competition(driver_handler, autonomous_handler)
+
+
 # </editor-fold>
 
 
 def update_globals() -> None:
     """
-    A setup function, sets the globals to the values selected on the controller using its screen to print them
+    A setup function, sets the globals to the values selected on the main controller using its screen to print them
     """
     setting_index = 0
     while setting_index < len(Globals.SETTINGS):
@@ -171,114 +269,40 @@ def update_globals() -> None:
                 pass
 
 
-def on_autonomous() -> None:
-    """
-    This is the function designated to run when the autonomous portion of the program is triggered
-    """
-    # Wait for setup to be complete
-    brain.screen.set_font(FontType.MONO12)
-    if not Globals.SETUP_COMPLETE:
-        bprint("[on_autonomous]: setup not complete, ignoring request")
-        return
-    global drivetrain  # Ensure we can access the custom drivetrain
-    autonomous_log = Logging(log_format="[%n]:%m:%s\n", mode="wt", log_name="Autonomous")
-
-    def auton_log(string):
-        """
-        Send a string to the log and the brain screen
-        :param string: The string to send
-        """
-        autonomous_log.log(string, "on_autonomous")
-        bprint(string)
-    brain.screen.set_font(FontType.MONO12)
-    Motors.allWheels.set_stopping(BRAKE)
-    drivetrain.reset()
-    auton_log("Autonomous:STATUS: Start")
-    if Globals.AUTONOMOUS_TASK == AutonomousTask.DO_NOTHING:
-        auton_log("Autonomous:STATUS: Doing nothing")
-    elif Globals.AUTONOMOUS_TASK == AutonomousTask.SKILLS:
-        auton_log("Autonomous:STATUS: Running skills")
-    if Globals.AUTONOMOUS_TASK == AutonomousTask.DRIVETRAIN_TEST:
-        auton_log("Autonomous:STATUS: Running drivetrain test")
-        drivetrain.turn_to_heading(0)
-        drivetrain.move_towards_heading(0, target_speed=50, distance_mm=1000)
-        drivetrain.turn_relative(180)
-        drivetrain.move_towards_heading(180, target_speed=50, distance_mm=1000)
-    
-    auton_log("Autonomous:INFO: Cleaning up")
-    Motors.allWheels.stop()
-    Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
-    auton_log("Autonomous:STATUS: Exit")
-    drivetrain.log.exit()
-    autonomous_log.exit()
-
-
-def on_driver() -> None:
-    """
-    This is the function designated to run when the autonomous portion of the program is triggered
-    """
-    # Wait for setup to be complete
-    brain.screen.set_font(FontType.MONO12)
-    bprint("[on_driver]: Waiting for setup thread")
-    while not Globals.SETUP_COMPLETE:
-        sleep(5)
-    bprint("[on_driver]: Done")
-    global drivetrain
-    Motors.allWheels.spin(FORWARD)
-    while True:
-        if not Globals.PAUSE_DRIVER_CONTROL:
-            drivetrain.move_with_controller(Controllers.primary)
-
-
-# Primary controller bindings
-# Controllers.primary.buttonA.pressed()
-# Secondary controller bindings
-# Controllers.primary.buttonA.pressed()
-
-
-# <editor-fold desc="Competition State Handlers">
-def autonomous_handler() -> None:
-    """
-    Coordinate when to run the autonomous function using the vex competition library to read the game state.
-    """
-    autonomous_thread = Thread(on_autonomous)
-    while competition.is_autonomous() and competition.is_enabled():
-        sleep(10)
-    for thread in (autonomous_thread,):
-        thread.stop()
-
-
-def driver_handler() -> None:
-    """
-    Coordinate when to run the driver function using the vex competition library to read the game state.
-    """
-    driver_thread = Thread(on_driver)
-    while competition.is_driver_control() and competition.is_enabled():
-        sleep(10)
-    for thread in (driver_thread,):
-        thread.stop()
-
-
-# Register the competition functions
-competition = Competition(driver_handler, autonomous_handler)
-# </editor-fold>
-
 if __name__ == "__main__":
     brain.screen.set_font(FontType.MONO12)
+    if BACKGROUND_IMAGE:
+        brain.screen.draw_image_from_file(str(BACKGROUND_IMAGE), 0, 0)
     bprint("Program: " + __title__)
     bprint("Version: " + __version__)
     bprint("Author: " + __author__)
     bprint("Team: " + __team__)
-    update_globals()
-    # Apply the effect of setting Globals.STOPPING_MODE during setup
-    Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
+    while True:
+        update_globals()
+        # Apply the effect of setting Globals.STOPPING_MODE during setup
+        Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
+        cprint("Please confirm", Controllers.secondary)
+        cprint("Auton: " + str(Globals.AUTONOMOUS_TASK), Controllers.secondary)
+        while not any((Controllers.secondary.buttonA.pressing(), Controllers.secondary.buttonB.pressing())):
+            wait(5)
+        if Controllers.secondary.buttonA.pressing():
+            break
+        else:
+            Controllers.primary.rumble("-")
+            cclear()
     # Initialize a new smart drivetrain from our helper functions module (Not the vex one)
-    drivetrain = Drivetrain(inertial=Sensors.inertial, left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, wheel_radius_mm=50, turn_aggression=0.25, correction_aggression=0.1, heading_offset_tolerance=1, motor_stall_speed=5, movement_slowdown_slope=0.2, driver_control_deadzone=0.02)
-    cprint("Calibrating Gyro...")
+    drivetrain = Drivetrain(inertial=Sensors.inertial, left_side_motors=(Motors.leftFrontMotor, Motors.leftRearMotor),
+                            right_side_motors=(Motors.rightFrontMotor, Motors.rightRearMotor), wheel_radius_mm=50, heading_offset_tolerance=1)
+    bprint("Calibrating Gyro...")
     Sensors.inertial.calibrate()
     while Sensors.inertial.is_calibrating():
         pass
     cclear()
+    # Set up controller callbacks here to avoid triggering them by pressing buttons during setup
+    # Primary controller bindings
+    # Controllers.primary.buttonA.pressed(callback)
+    # Secondary controller bindings
+    # Controllers.secondary.buttonA.pressed(callback)
     Globals.SETUP_COMPLETE = True
     cprint("Setup complete")
     bprint("Setup complete")

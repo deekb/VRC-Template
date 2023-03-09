@@ -3,12 +3,21 @@ import builtins as __builtin__
 import os
 import sys
 import time
+from threading import Thread
 
 CompetitionState = input('Please enter the competition state. Please enter either "driver_control" or "autonomous":')
 SECONDS = "SECONDS"
+PERCENT = "PERCENT"
 MSEC = "MSEC"
+PRIMARY = "PRIMARY"
+PARTNER = "PARTNER"
+COAST = "COAST"
+BRAKE = "BRAKE"
+HOLD = "HOLD"
 
-class Competition():
+
+
+class Competition:
     def __init__(self, driver_control, autonomous):
         if CompetitionState == "driver_control":
             driver_control()
@@ -18,7 +27,75 @@ class Competition():
             print("Unknown Competition State")
             sys.exit(1)
 
-class FontType():
+
+class competition:
+    @staticmethod
+    def is_driver_control():
+        return CompetitionState == "driver_control"
+
+    @staticmethod
+    def is_autonomous():
+        return CompetitionState == "autonomous"
+
+    @staticmethod
+    def is_enabled():
+        return True
+
+
+class Inertial:
+    def __init__(self, Port):
+        pass
+
+
+class Controller:
+    def __init__(self, port):
+        pass
+
+
+class Motor:
+    def __init__(self, Port, GearRatio, Inverted):
+        pass
+
+    def spin(self, direction):
+        pass
+
+
+class MotorGroup:
+    def __init__(self, *motors):
+        pass
+    def spin(self, direction):
+        pass
+
+
+class Ports:
+    PORT1 = "Port 1"
+    PORT2 = "Port 2"
+    PORT3 = "Port 3"
+    PORT4 = "Port 4"
+    PORT5 = "Port 5"
+    PORT6 = "Port 6"
+    PORT7 = "Port 7"
+    PORT8 = "Port 8"
+    PORT9 = "Port 9"
+    PORT10 = "Port 10"
+    PORT11 = "Port 11"
+    PORT12 = "Port 12"
+    PORT13 = "Port 13"
+    PORT14 = "Port 14"
+    PORT15 = "Port 15"
+    PORT16 = "Port 16"
+    PORT17 = "Port 17"
+    PORT18 = "Port 18"
+    PORT19 = "Port 19"
+    PORT20 = "Port 20"
+    PORT21 = "Port 21"
+
+
+class GearSetting:
+    RATIO_18_1 = "18 to 1"
+
+
+class FontType:
     @staticmethod
     def MONO12():
         pass
@@ -59,7 +136,8 @@ class FontType():
     def PROP60():
         pass
 
-class Color():
+
+class Color:
     @staticmethod
     def BLACK():
         pass
@@ -100,8 +178,9 @@ class Color():
     def TRANSPARENT():
         pass
 
-class brain():
-    class screen():
+
+class Brain:
+    class screen:
         @staticmethod
         def print(text):
             print(text)
@@ -185,7 +264,7 @@ class brain():
         def y_position():
             return 0
 
-    class battery():
+    class battery:
         @staticmethod
         def voltage():
             return 12.0
@@ -198,10 +277,10 @@ class brain():
         def capacity():
             return 100.0
 
-    class timer():
+    class timer:
         @staticmethod
         def event(callback, timee):
-            time.sleep(timee*1000)
+            time.sleep(timee * 1000)
             callback()
 
         @staticmethod
@@ -212,7 +291,7 @@ class brain():
         def time(UNITS):
             pass
 
-    class Event():
+    class Event:
         @staticmethod
         def broadcast():
             pass
@@ -226,8 +305,9 @@ class brain():
             callback()
 
         @staticmethod
-        def wait(timee):
-            time.sleep(timee)
+        def wait(_time):
+            time.sleep(_time)
+
 
 def print(text):
     if text == r"\033[2J":
@@ -237,6 +317,12 @@ def print(text):
         os.system(command)
     __builtin__.print(text)
 
+def wait(_time, _type = MSEC):
+    if _type == SECONDS:
 
-brain.screen.print("Hello World")
-brain.screen.clear_screen()
+    elif _type == MSEC
+    time.sleep(milliseconds / 1000)
+
+
+Brain.screen.print("Hello World")
+Brain.screen.clear_screen()
