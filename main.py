@@ -52,7 +52,7 @@ class Sensors:
 
 class Controllers:
     """
-    A class that contains references to the primary and secondary controllers
+    A class that contains references to the primary and secondary controller
     """
     primary = Controller(PRIMARY)
     secondary = Controller(PARTNER)
@@ -60,7 +60,7 @@ class Controllers:
 
 class Globals:
     """
-    Stores variables that may need to be (or ought to be able to be) modified by any function in the program, here you can also set default/initial values for said variables
+    Stores variables that may need to be (or should be able to be) modified or accessed by any function in the program, here you can also set default/initial values for said variables
     """
     AUTONOMOUS_THREADS = []
     DRIVER_CONTROL_THREADS = []
@@ -79,72 +79,53 @@ class Globals:
     )
 
 
-# <editor-fold desc="Print/Clear functions">
-def bprint(string) -> None:
-    """
-    Prints a string to the brain's screen
-    :param string: the string to print to the screen
-    :type string: str
-    """
-    brain.screen.print(string)
-    brain.screen.next_row()
+def clear(console=(brain,)):
+    if type(console) is tuple:
+        for device in console:
+            device.screen.clear_screen()
+            device.screen.set_cursor(1, 1)
+    else:
+        console.screen.clear_screen()
+        console.screen.set_cursor(1, 1)
 
 
-def bclear() -> None:
+def print(text, console=(brain,), end="\n"):
     """
-    Clears the brain's screen
+    Prints a string to a console
+    :param console: The console to print to (brain or controller object)
+    :param text: the text to print to the screen
+    :type text: str
+    :param end: The string to print at the end (defaults to new line)
+    :type end: str
     """
-    brain.screen.clear_screen()
-    brain.screen.set_cursor(1, 1)
-
-
-def cprint(string, controller: Controller = Controllers.primary) -> None:
-    """
-    Prints a string to a controller's screen
-    :param controller: The controller to print to
-    :type controller: Controller
-    :param string: the string to print to the screen
-    :type string: str
-    """
-    controller.screen.print(string)
-    controller.screen.next_row()
-
-
-def cclear(controller: Controller = Controllers.primary) -> None:
-    """
-    Clears the controller screen
-    :param controller: The controller to clear
-    :type controller: Controller
-    """
-    controller.screen.clear_screen()
-    controller.screen.set_cursor(1, 1)
-
-
-# </editor-fold>
+    if type(console) is tuple:
+        for device in console:
+            device.screen.print(str(text) + end)
+    else:
+        console.screen.print(str(text) + end)
 
 
 def on_autonomous() -> None:
     """
     This is the function designated to run when the autonomous portion of the program is triggered
     """
-    # Wait for setup to be complete
     brain.screen.set_font(FontType.MONO12)
+    # ensure setup is complete
     if not Globals.SETUP_COMPLETE:
-        bprint("[on_autonomous]: setup not complete, ignoring request")
+        print("[on_autonomous]: setup not complete, ignoring request")
         return
-    autonomous_log = Logging(log_format="[%n]:%m:%s\n", mode="wt", log_name="Autonomous")  # Start a new log for this autonomous
+    autonomous_log = Logging(log_format="[%n]:%m:%s\n", mode="wt", log_name="Autonomous")  # Start a new log for this autonomous instance, places it in /Logs on the SD card
 
     def auton_log(string):
         """
         Send a string to the log and the brain screen
         :param string: The string to send
+        :type string: str
         """
         if AUTONOMOUS_VERBOSITY >= 1:
             autonomous_log.log(string, "on_autonomous")
             if AUTONOMOUS_VERBOSITY >= 2:
-                bprint(string)
-
-    brain.screen.set_font(FontType.MONO12)
+                print(string)
     Motors.allWheels.set_stopping(BRAKE)
     drivetrain.reset()
     auton_log("Autonomous:STATUS: Start")
@@ -173,10 +154,10 @@ def on_driver() -> None:
     """
     # Wait for setup to be complete
     brain.screen.set_font(FontType.MONO12)
-    bprint("[on_driver]: Waiting for setup")
+    print("[on_driver]: Waiting for setup")
     while not Globals.SETUP_COMPLETE:
         sleep(5)
-    bprint("[on_driver]: Done")
+    print("[on_driver]: Done")
     Motors.allWheels.spin(FORWARD)
     while True:
         if not Globals.PAUSE_DRIVER_CONTROL:
@@ -192,7 +173,7 @@ def autonomous_handler() -> None:
     """
     for _function in (on_autonomous,):
         Globals.AUTONOMOUS_THREADS.append(Thread(target=_function))
-    bprint("Started autonomous")
+    print("Started autonomous")
     while competition.is_autonomous() and competition.is_enabled():
         wait(10)
     for thread in Globals.AUTONOMOUS_THREADS:
@@ -205,7 +186,7 @@ def driver_handler() -> None:
     """
     for _function in (on_driver,):
         Globals.DRIVER_CONTROL_THREADS.append(Thread(target=_function))
-    bprint("Started driver control")
+    print("Started driver control")
     while competition.is_driver_control() and competition.is_enabled():
         wait(10)
     for thread in Globals.DRIVER_CONTROL_THREADS:
@@ -237,8 +218,8 @@ def update_globals() -> None:
         while True:
             value_printable = Globals.SETTINGS[setting_index][1][choice][0]
             value = Globals.SETTINGS[setting_index][1][choice][1]
-            cclear()
-            cprint(setting_name + ": " + value_printable)
+            clear(Controllers.primary)
+            print(setting_name + ": " + value_printable, Controllers.primary)
             if setting_index == 0:
                 Globals.STOPPING_MODE = value
             elif setting_index == 1:
@@ -273,38 +254,38 @@ if __name__ == "__main__":
     brain.screen.set_font(FontType.MONO12)
     if BACKGROUND_IMAGE:
         brain.screen.draw_image_from_file(str(BACKGROUND_IMAGE), 0, 0)
-    bprint("Program: " + __title__)
-    bprint("Version: " + __version__)
-    bprint("Author: " + __author__)
-    bprint("Team: " + __team__)
+    print("Program: " + __title__)
+    print("Version: " + __version__)
+    print("Author: " + __author__)
+    print("Team: " + __team__)
     while True:
         update_globals()
         # Apply the effect of setting Globals.STOPPING_MODE during setup
         Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
-        cprint("Please confirm", Controllers.secondary)
-        cprint("Auton: " + str(Globals.AUTONOMOUS_TASK), Controllers.secondary)
+        print("Please confirm", Controllers.secondary)
+        print("Auton: " + str(Globals.AUTONOMOUS_TASK), Controllers.secondary)
         while not any((Controllers.secondary.buttonA.pressing(), Controllers.secondary.buttonB.pressing())):
             wait(5)
         if Controllers.secondary.buttonA.pressing():
             break
         else:
             Controllers.primary.rumble("-")
-            cclear()
+            clear(Controllers.primary)
     # Initialize a new smart drivetrain from our helper functions module (Not the vex one)
     drivetrain = Drivetrain(inertial=Sensors.inertial, left_side_motors=(Motors.leftFrontMotor, Motors.leftRearMotor),
-                            right_side_motors=(Motors.rightFrontMotor, Motors.rightRearMotor), wheel_radius_mm=50, heading_offset_tolerance=1)
-    bprint("Calibrating Gyro...")
+                            right_side_motors=(Motors.rightFrontMotor,
+                                               Motors.rightRearMotor), wheel_radius_mm=50, heading_offset_tolerance=1)
+    print("Calibrating Gyro...")
     Sensors.inertial.calibrate()
     while Sensors.inertial.is_calibrating():
         pass
-    cclear()
+    clear(Controllers.primary)
     # Set up controller callbacks here to avoid triggering them by pressing buttons during setup
     # Primary controller bindings
     # Controllers.primary.buttonA.pressed(callback)
     # Secondary controller bindings
     # Controllers.secondary.buttonA.pressed(callback)
     Globals.SETUP_COMPLETE = True
-    cprint("Setup complete")
-    bprint("Setup complete")
+    print("Setup complete", (brain, Controllers.primary))
     Controllers.primary.rumble(".")
     Controllers.secondary.rumble(".")

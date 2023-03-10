@@ -2,7 +2,6 @@
 Helper functions for our program
 """
 import math
-from itertools import chain
 
 from vex import *
 
@@ -32,15 +31,18 @@ class SlewLimit:
     Limit the acceleration of a value with a slew limiter
     """
 
-    def __init__(self, max_slew_rate):
+    def __init__(self, max_slew_rate_per_second):
         """
         Initialize a new slew limiter with the specified maximum rate
-        :param max_slew_rate: The maximum rate of acceleration in one update, every time the "update" method is called the value is allowed to increase or decrease by a maximum of this value
-        :type max_slew_rate: float
+        :param max_slew_rate_per_second: The maximum rate of acceleration in one second, every time the "update" method is called the value is allowed to increase or decrease by a maximum of this value times the delta time
+        :type max_slew_rate_per_second: float
         """
-        self.max_slew_rate = max_slew_rate
+        self.max_slew_rate = max_slew_rate_per_second
         self.previous_value = 0
         self.delta_value = 0
+        self.current_time = brain.timer.time(MSEC)
+        self.previous_time = self.current_time
+        self.delta_time = 0
 
     def update(self, new_value):
         """
@@ -49,12 +51,15 @@ class SlewLimit:
         :return:
         """
         self.delta_value = new_value - self.previous_value
-        if self.delta_value and abs(self.delta_value) > self.max_slew_rate:
+        self.current_time = brain.timer.time(MSEC)
+        self.delta_time = current_time - self.previous_time
+        self.previous_time = self.current_time
+        if abs(self.delta_value) > self.max_slew_rate * (self.delta_time / 1000):
             return self.previous_value + self.max_slew_rate * (self.delta_value / abs(self.delta_value))
         return self.previous_value + self.delta_value
 
 
-def cubic_normalize(value: float, linearity: float) -> float:
+def apply_cubic(value: float, linearity: float) -> float:
     """
     Normalize a value across a cubic curve with a linearity
     :param linearity: How close to a linear function the normalizer should use
@@ -69,7 +74,7 @@ def cubic_normalize(value: float, linearity: float) -> float:
 
 class PIDMotor:
     """
-    Wrap a motor definition in this class to use a custom PID to control its movements ie: my_motor = PIDMotor(Port, GearRatio, Inverted, kp, kd, t)
+    Wrap a motor definition in this class to use a custom PID to control its movements ie: my_motor = PIDMotor(Motor(...), kp, kd, t)
     Waring, this class disables all motor functionality except the following functions:[set_velocity, set_stopping, stop, spin, velocity]
     :param motor_object: The motor to apply the PID to
     :param kp: Kp value for the PID: How quickly to modify the speed if it has not yet reached the desired speed
@@ -77,7 +82,7 @@ class PIDMotor:
     :param t: Time between PID updates
     """
 
-    def __init__(self, motor_object, kp: float = 0.4, kd: float = 0.05, t: float = 0.01) -> None:
+    def __init__(self, motor_object, kp: float = 0.4, kd: float = 0.05, t: float = 0.01):
         self.motor_object = motor_object
         self.kp = kp
         self.kd = kd

@@ -3,7 +3,7 @@ A highly customizable drivetrain with built-in dynamic course correction
 """
 
 from vex import *
-from HelperFunctions import cubic_normalize, apply_deadzone
+from HelperFunctions import apply_cubic, apply_deadzone
 from Constants import DrivetrainType, DriverControlStyle
 
 
@@ -16,7 +16,7 @@ class Drivetrain:
                  correction_aggression: float = 0.1, motor_lowest_speed: int = 1,
                  driver_control_linearity: float = 0.45, driver_control_deadzone: float = 0,
                  movement_slowdown_slope: float = 0.2, driver_control_type: int = DriverControlStyle.TANK,
-                 drivetrain_type: int = DrivetrainType.TANK) -> None:
+                 drivetrain_type: int = DrivetrainType.TANK, log=None) -> None:
         """
         Initialize a new drivetrain with the specified properties
         :param inertial: The inertial sensor to use for the drivetrain
@@ -43,6 +43,7 @@ class Drivetrain:
         :type driver_control_deadzone: float
         :param drivetrain_type: The drivetrains physical type, currently only tank
         :type drivetrain_type: int
+        :param log: The log to write accuracy information to
         """
         self.inertial = inertial
         self.left_side = MotorGroup(*left_side_motors)
@@ -63,8 +64,12 @@ class Drivetrain:
         self.current_heading = 0
         self.current_x = 0
         self.current_y = 0
+        if log:
+            self.log = log
+        else:
+            self.log = None
         # TODO: remove this and allow passing a log object instead
-        self.log = Logging(log_format="[%n]:%m:%s\n", mode="wt", log_name="drivetrain")
+        # self.log = Logging(log_format="[%n]:%m:%s\n", mode="wt", log_name="drivetrain")
 
     def turn_to_heading(self, desired_heading: float) -> None:
         """
@@ -74,7 +79,7 @@ class Drivetrain:
         """
         desired_heading %= 360
         get_heading = self.inertial.heading  # Speeds up the process of getting the heading
-        current_heading = get_heading(DEGREES) % 360  # Running modulus on the heading to ensure it is between 0 and 360
+        current_heading = get_heading(DEGREES) % 360  # Running modulo on the heading to ensure it is between 0 and 360
         # Determine how far off the robot is and which way is a shorter turn
         left_turn_difference = (current_heading - desired_heading)
         right_turn_difference = (desired_heading - current_heading)
@@ -119,19 +124,20 @@ class Drivetrain:
                 right_turn_difference += 360
         self.all_wheels.stop()
         self.current_heading = desired_heading
-        wait(500)
-        current_heading = get_heading(DEGREES) % 360
-        left_turn_difference = (current_heading - desired_heading)
-        right_turn_difference = (desired_heading - current_heading)
-        if left_turn_difference < 0:  # Ensure that the values are in range -180 to 180
-            left_turn_difference += 360
-        if right_turn_difference < 0:
-            right_turn_difference += 360
-        if abs(left_turn_difference) < abs(right_turn_difference):  # Turn towards the most efficient direction
-            delta_heading = left_turn_difference
-        else:
-            delta_heading = right_turn_difference
-        self.log.log("turned to " + str(desired_heading) + " with accuracy of " + str(delta_heading) + " degrees", function_name="turn_to_heading")
+        if self.log:
+            wait(500)
+            current_heading = get_heading(DEGREES) % 360
+            left_turn_difference = (current_heading - desired_heading)
+            right_turn_difference = (desired_heading - current_heading)
+            if left_turn_difference < 0:  # Ensure that the values are in range -180 to 180
+                left_turn_difference += 360
+            if right_turn_difference < 0:
+                right_turn_difference += 360
+            if abs(left_turn_difference) < abs(right_turn_difference):  # Turn towards the most efficient direction
+                delta_heading = left_turn_difference
+            else:
+                delta_heading = right_turn_difference
+            self.log.log("turned to " + str(desired_heading) + " with accuracy of " + str(delta_heading) + " degrees", function_name="turn_to_heading")
 
     def move_towards_heading(self, desired_heading: float, target_speed: float, distance_mm: float) -> None:
         """
@@ -187,22 +193,23 @@ class Drivetrain:
         self.current_heading = desired_heading
         self.current_x += math.cos(desired_heading * math.pi / 180) * distance_mm
         self.current_y += math.sin(desired_heading * math.pi / 180) * distance_mm
-        wait(500)
-        current_heading = get_heading.heading(DEGREES) % 360
-        left_turn_difference = (current_heading - desired_heading)
-        right_turn_difference = (desired_heading - current_heading)
-        if left_turn_difference < 0:  # Ensure that the values are in range -180 to 180
-            left_turn_difference += 360
-        if right_turn_difference < 0:
-            right_turn_difference += 360
-        if abs(left_turn_difference) < abs(right_turn_difference):  # Turn towards the most efficient direction
-            delta_heading = left_turn_difference
-        else:
-            delta_heading = right_turn_difference
-        wheel_degrees_rotated = (get_left_motor_position(DEGREES) + get_right_motor_position(DEGREES)) / 2
-        distance_traveled = abs((
-                                            wheel_degrees_rotated - initial_wheel_degrees_rotated) / 360 * self.wheel_circumference_mm)
-        self.log.log("moved towards " + str(desired_heading) + " with heading accuracy of " + str(delta_heading) + " degrees and distance accuracy of " + str(distance_mm - distance_traveled) + "mm", function_name="move_towards_heading")
+        if self.log:
+            wait(500)
+            current_heading = get_heading.heading(DEGREES) % 360
+            left_turn_difference = (current_heading - desired_heading)
+            right_turn_difference = (desired_heading - current_heading)
+            if left_turn_difference < 0:  # Ensure that the values are in range -180 to 180
+                left_turn_difference += 360
+            if right_turn_difference < 0:
+                right_turn_difference += 360
+            if abs(left_turn_difference) < abs(right_turn_difference):  # Turn towards the most efficient direction
+                delta_heading = left_turn_difference
+            else:
+                delta_heading = right_turn_difference
+            wheel_degrees_rotated = (get_left_motor_position(DEGREES) + get_right_motor_position(DEGREES)) / 2
+            distance_traveled = abs((
+                                                wheel_degrees_rotated - initial_wheel_degrees_rotated) / 360 * self.wheel_circumference_mm)
+            self.log.log("moved towards " + str(desired_heading) + " with heading accuracy of " + str(delta_heading) + " degrees and distance accuracy of " + str(distance_mm - distance_traveled) + "mm", function_name="move_towards_heading")
 
     def move_to_position(self, x: float, y: float, target_speed: float) -> None:
         """
@@ -227,8 +234,8 @@ class Drivetrain:
         if self.driver_control_type == DriverControlStyle.TANK:
             left_controller_input = apply_deadzone(left_stick["y"]() / 100, self.driver_control_deadzone)
             right_controller_input = apply_deadzone(right_stick["y"]() / 100, self.driver_control_deadzone)
-            left_speed = cubic_normalize(left_controller_input, self.driver_control_linearity) * 100
-            right_speed = cubic_normalize(right_controller_input, self.driver_control_linearity) * 100
+            left_speed = apply_cubic(left_controller_input, self.driver_control_linearity) * 100
+            right_speed = apply_cubic(right_controller_input, self.driver_control_linearity) * 100
         elif self.driver_control_type == DriverControlStyle.ARCADE:
             raise NotImplemented("Arcade drive not yet implemented, please us tank drive")
         else:
